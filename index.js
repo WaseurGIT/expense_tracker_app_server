@@ -26,7 +26,7 @@ async function run() {
     await client.connect();
 
     const expensesCollection = client
-      .db("expenseTracker")
+      .db("expenseTrackerApp")
       .collection("expenses");
 
     app.post("/expenses", async (req, res) => {

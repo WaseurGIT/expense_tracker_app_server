@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
 const dotenv = require("dotenv");
 dotenv.config();
 const port = process.env.PORT || 3000;
@@ -20,6 +22,22 @@ const client = new MongoClient(uri, {
   },
 });
 
+const verrifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(403).send({ message: "Forbidden access" });
+    }
+    req.userId = decoded.userId;
+    next();
+  });
+};
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -28,11 +46,77 @@ async function run() {
     const expensesCollection = client
       .db("expenseTrackerApp")
       .collection("expenses");
+    const usersCollection = client.db("expenseTrackerApp").collection("users");
 
-    app.post("/expenses", async (req, res) => {
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+        if (!user.email) {
+          return res.status(400).send({ message: "Email is required" });
+        }
+
+        const existingUser = await usersCollection.findOne({
+          email: user.email,
+        });
+        if (existingUser) {
+          return res.status(400).send({ message: "User already exists" });
+        }
+
+        const hashedPassword = await bcrypt.hash(user.password, 12);
+        const newUser = {
+          name: user.name,
+          email: user.email,
+          password: hashedPassword,
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+        res.send({ message: "User created successfully" });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Failed to create user", error: error.message });
+      }
+    });
+
+    app.post("/login", async (req, res) => {
+      try {
+        const { email, password } = req.body;
+        if (!email || !password) {
+          return res
+            .status(400)
+            .send({ message: "Email and password are required" });
+        }
+
+        const user = await usersCollection.findOne({ email });
+        if (!user) {
+          return res.status(400).send({ message: "Invalid email or password" });
+        }
+
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+          return res.status(400).send({ message: "Invalid email or password" });
+        }
+
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+          expiresIn: "7d",
+        });
+
+        res.send({ message: "Login successful", token });
+      } catch (error) {
+        res
+          .status(500)
+          .send({ message: "Failed to login", error: error.message });
+      }
+    });
+
+    app.post("/expenses", verrifyToken, async (req, res) => {
       try {
         const expense = req.body;
-        const result = await expensesCollection.insertOne(expense);
+        const newExpense = {
+          ...expense,
+          userId: req.userId,
+        };
+        const result = await expensesCollection.insertOne(newExpense);
         res.send(result);
       } catch (error) {
         res
@@ -41,9 +125,9 @@ async function run() {
       }
     });
 
-    app.get("/expenses", async (req, res) => {
+    app.get("/expenses", verrifyToken, async (req, res) => {
       try {
-        const expenses = await expensesCollection.find().toArray();
+        const expenses = await expensesCollection.find({ userId: req.userId }).toArray();
         res.send(expenses);
       } catch (error) {
         res
@@ -68,6 +152,6 @@ app.get("/", (req, res) => {
   res.send("Expenses Tracker app server is running ");
 });
 
-app.listen(port,"0.0.0.0", () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(`Server is running on port ${port}`);
 });

@@ -101,7 +101,12 @@ async function run() {
           expiresIn: "7d",
         });
 
-        res.send({ message: "Login successful", token });
+        const logedInUser = {
+          name: user.name,
+          email: user.email,
+        };
+
+        res.send({ message: "Login successful", token, user: logedInUser });
       } catch (error) {
         res
           .status(500)

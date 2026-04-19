@@ -2,8 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const dotenv = require("dotenv");
-dotenv.config();
+const dotenv = require("dotenv").config();
+// dotenv.config();
 const port = process.env.PORT || 3000;
 const app = express();
 
@@ -22,7 +22,7 @@ const client = new MongoClient(uri, {
   },
 });
 
-const verrifyToken = (req, res, next) => {
+const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
     return res.status(401).send({ message: "Unauthorized access" });
@@ -101,12 +101,12 @@ async function run() {
           expiresIn: "7d",
         });
 
-        const logedInUser = {
+        const loggedInUser = {
           name: user.name,
           email: user.email,
         };
 
-        res.send({ message: "Login successful", token, user: logedInUser });
+        res.send({ message: "Login successful", token, user: loggedInUser });
       } catch (error) {
         res
           .status(500)
@@ -114,7 +114,7 @@ async function run() {
       }
     });
 
-    app.post("/expenses", verrifyToken, async (req, res) => {
+    app.post("/expenses", verifyToken, async (req, res) => {
       try {
         const expense = req.body;
         const newExpense = {
@@ -130,7 +130,7 @@ async function run() {
       }
     });
 
-    app.get("/expenses", verrifyToken, async (req, res) => {
+    app.get("/expenses", verifyToken, async (req, res) => {
       try {
         const expenses = await expensesCollection.find({ userId: req.userId }).toArray();
         res.send(expenses);
